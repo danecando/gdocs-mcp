@@ -1,0 +1,24 @@
+{
+  "name": "gdocs-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Google Docs and Sheets — file authoring and spreadsheet management (Cloudflare Workers)",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "start": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "^0.2.3",
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "agents": "^0.4.0",
+    "ai": "^6.0.79",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250109.0",
+    "typescript": "^5.6.2",
+    "wrangler": "^4.64.0"
+  }
+}

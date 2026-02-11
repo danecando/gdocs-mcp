@@ -1,0 +1,13 @@
+{
+  "name": "gdocs-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-03-10",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [{ "class_name": "GDriveMCP", "name": "MCP_OBJECT" }]
+  },
+  "migrations": [{ "new_sqlite_classes": ["GDriveMCP"], "tag": "v1" }],
+  "kv_namespaces": [
+    { "binding": "OAUTH_KV", "id": "89dcaebea1e64569aed622940b635542" }
+  ]
+}

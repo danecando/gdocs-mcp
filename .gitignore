@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.js.map
+*.d.ts
+!src/**/*.d.ts
+!worker-configuration.d.ts
+.gdrive-server-credentials.json
+gcp-oauth.keys.json
+.dev.vars
+.wrangler/
