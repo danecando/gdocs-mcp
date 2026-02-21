@@ -1,4 +1,7 @@
-import OAuthProvider from "@cloudflare/workers-oauth-provider";
+import OAuthProvider, {
+  GrantType,
+  type TokenExchangeCallbackOptions,
+} from "@cloudflare/workers-oauth-provider";
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { DriveClient } from "./drive-client.js";
@@ -12,7 +15,61 @@ export type Props = {
   accessToken: string;
   refreshToken: string;
   expiresAt: number;
+  userId?: string;
+  googleClientId?: string;
+  googleClientSecret?: string;
 };
+
+type GoogleTokenRefreshResponse = {
+  access_token: string;
+  expires_in: number;
+  refresh_token?: string;
+  error?: string;
+  error_description?: string;
+};
+
+async function refreshGoogleAccessToken(
+  options: TokenExchangeCallbackOptions,
+) {
+  const props = options.props as Props;
+
+  if (!props?.refreshToken || !props.googleClientId || !props.googleClientSecret) {
+    throw new Error("Missing Google OAuth credentials in grant props");
+  }
+
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: props.googleClientId,
+      client_secret: props.googleClientSecret,
+      refresh_token: props.refreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+
+  const data = (await tokenRes.json()) as GoogleTokenRefreshResponse;
+  if (!tokenRes.ok || !data.access_token || !data.expires_in) {
+    const code = data.error ?? "unknown_error";
+    const description = data.error_description ?? "Google token refresh failed";
+    throw new Error(`${code}: ${description}`);
+  }
+
+  const now = Date.now();
+  const nextProps: Props = {
+    ...props,
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token ?? props.refreshToken,
+    expiresAt: now + data.expires_in * 1000,
+    userId: props.userId ?? options.userId,
+  };
+
+  return {
+    accessTokenProps: nextProps,
+    newProps: nextProps,
+    accessTokenTTL: Math.max(60, data.expires_in - 60),
+  };
+}
 
 export class GDriveMCP extends McpAgent<Env, {}, Props> {
   server = new McpServer({
@@ -47,4 +104,11 @@ export default new OAuthProvider({
   authorizeEndpoint: "/authorize",
   tokenEndpoint: "/token",
   clientRegistrationEndpoint: "/register",
+  accessTokenTTL: 3600,
+  tokenExchangeCallback: async (options) => {
+    if (options.grantType !== GrantType.REFRESH_TOKEN) {
+      return;
+    }
+    return refreshGoogleAccessToken(options);
+  },
 });

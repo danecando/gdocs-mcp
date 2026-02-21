@@ -30,8 +30,8 @@ export class DriveClient {
     this.tokenExpiry = config.expiresAt ?? 0;
   }
 
-  private async getAccessToken(): Promise<string> {
-    if (this.currentAccessToken && Date.now() < this.tokenExpiry) {
+  private async getAccessToken(forceRefresh = false): Promise<string> {
+    if (!forceRefresh && this.currentAccessToken && Date.now() < this.tokenExpiry) {
       return this.currentAccessToken;
     }
 
@@ -54,17 +54,28 @@ export class DriveClient {
     });
 
     if (!res.ok) {
+      const errorText = await res.text();
+      if (res.status === 400 && errorText.includes("invalid_grant")) {
+        throw new DriveApiError(
+          401,
+          `Google refresh token is invalid or revoked (${errorText})`,
+        );
+      }
       throw new DriveApiError(
         res.status,
-        `Token refresh failed: ${await res.text()}`,
+        `Token refresh failed: ${errorText}`,
       );
     }
 
     const data = (await res.json()) as {
       access_token: string;
       expires_in: number;
+      refresh_token?: string;
     };
     this.currentAccessToken = data.access_token;
+    if (data.refresh_token) {
+      this.config.refreshToken = data.refresh_token;
+    }
     // Refresh 60s before expiry
     this.tokenExpiry = Date.now() + (data.expires_in - 60) * 1000;
     return this.currentAccessToken;
@@ -74,11 +85,20 @@ export class DriveClient {
     url: string,
     options: RequestInit = {},
   ): Promise<Response> {
-    const token = await this.getAccessToken();
-    const headers = new Headers(options.headers);
-    headers.set("Authorization", `Bearer ${token}`);
+    const makeRequest = async (token: string) => {
+      const headers = new Headers(options.headers);
+      headers.set("Authorization", `Bearer ${token}`);
+      return fetch(url, { ...options, headers });
+    };
 
-    const res = await fetch(url, { ...options, headers });
+    let token = await this.getAccessToken();
+    let res = await makeRequest(token);
+
+    // If Google reports an auth failure, force a token refresh and retry once.
+    if (res.status === 401) {
+      token = await this.getAccessToken(true);
+      res = await makeRequest(token);
+    }
 
     if (!res.ok) {
       let message: string;
